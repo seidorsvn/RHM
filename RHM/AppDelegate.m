@@ -7,45 +7,162 @@
 //
 
 #import "AppDelegate.h"
+#import "SUPMessageClient.h"
+#import "RHM_Comercial_RHM_ComercialDB.h"
+#import <QuartzCore/QuartzCore.h>
 
 @implementation AppDelegate
 
 @synthesize window = _window;
+@synthesize dataService = _dataService;
+@synthesize syncService = _syncService;
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-    // Override point for customization after application launch.
     UISplitViewController *splitViewController = (UISplitViewController *)self.window.rootViewController;
     UINavigationController *navigationController = [splitViewController.viewControllers lastObject];
     splitViewController.delegate = (id)navigationController.topViewController;
+    NSSetUncaughtExceptionHandler(&uncaughtExceptionHandler);
+	
+	if (![SUPMessageClient provisioned]) {
+		[self showNoTransportAlert:kSUPMessageClientNoSettings];
+    } else {
+		
+        [self setDataService:[[DataService alloc] init]];
+		[self setSyncService:[[SynchronizationService alloc] init]];
+		
+		//Guardamos el usuario
+		NSString *user = [Utils retrieveFromUserDefaults:@"username_preference"];
+		//NSString *u = [NSString stringWithFormat:@"000000%i",[user intValue]];
+		//u = [u substringFromIndex:[u length]-10];
+		[[self dataService] setLoggedUser:user];
+		
+		[self.window makeKeyAndVisible];
+		
+		[RHM_Comercial_RHM_ComercialDB offlineLogin:@"Seidor" password:@"inicial123!"];
+        
+    }
+	
     return YES;
 }
-							
+
 - (void)applicationWillResignActive:(UIApplication *)application
 {
-    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-    // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
+    
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application
 {
-    // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later. 
-    // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+    
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application
 {
-    // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+    
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
-    // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+    
 }
 
 - (void)applicationWillTerminate:(UIApplication *)application
 {
-    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+	[SUPMessageClient stop];
+	[RHM_Comercial_RHM_ComercialDB stopBackgroundSynchronization];
+	
+	[self setWindow:nil];
+	[self setDataService:nil];
+	[self setSyncService:nil];
+}
+
+- (void)dismissKeyboard {
+    [self globalResignFirstResponder];
+}
+
+- (void)globalResignFirstResponder {
+    UIWindow * w = [[UIApplication sharedApplication] keyWindow];
+    for (UIView * v in [w subviews]){
+        [self globalResignFirstResponderRec:v];
+    }
+}
+
+- (void)globalResignFirstResponderRec:(UIView *) v {
+    if ([v respondsToSelector:@selector(resignFirstResponder)]){
+        [v resignFirstResponder];
+    }
+    for (UIView * sv in [v subviews]){
+        [self globalResignFirstResponderRec:sv];
+    }
+}
+
+static void uncaughtExceptionHandler(NSException *exception) 
+{
+    [[[UIAlertView alloc] initWithTitle:@"Disculpe las molestias" message:[NSString stringWithFormat:@"Ha ocurrido un error inesperado.\n\nEs recomendable que guarde su trabajo y reinicie la aplicación.\n\nTipo del error: %@\n\nDescripción: %@\n\nTraza de la pila: %@", [exception name], [exception reason], [exception callStackReturnAddresses]] delegate:[[UIApplication sharedApplication] delegate] cancelButtonTitle:@"Continuar" otherButtonTitles:@"Salir", nil] show];
+    [[NSRunLoop currentRunLoop] run];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex
+{
+    switch (buttonIndex) {
+        case 0:
+            if ([[alertView title] isEqualToString:@"Disculpe las molestias"]) {
+                [[[UIAlertView alloc] initWithTitle:@"Advertencia" message:@"\n\n\n\n\n\nLa aplicación continuará ejecutándose pero puede ser inestable." delegate:[[UIApplication sharedApplication] delegate] cancelButtonTitle:@"Continuar" otherButtonTitles:nil] show];
+            } else if ([[alertView title] isEqualToString:@"Advertencia"] && [[alertView message] isEqualToString:@"\n\n\n\n\n\n\nLa configuración de la aplicación está incompleta."]) {
+                exit(0);
+            }
+            break;
+        case 1:
+            exit(0);
+            break;
+    }
+}
+
+- (void)showNoTransportAlert:(NSInteger) ret
+{
+    NSString *message = nil;
+    
+    if (ret == kSUPMessageClientNoSettings) {
+        message = @"\n\n\n\n\n\n\nLa configuración de la aplicación está incompleta.";
+    } else if (ret == kSUPMessageClientKeyNotAvailable) {
+        message = @"\n\n\n\n\n\nHa ocurrido un error al acceder a la contraseña.";
+    } else {
+        message = @"\n\n\n\n\n\nHa ocurrido un error durante la identificación.";
+    }
+    
+    UIAlertView * noTransportAlert = [[UIAlertView alloc] initWithTitle:@"Advertencia" message:message delegate:self cancelButtonTitle:@"Aceptar" otherButtonTitles:nil];
+	
+	if(ret == kSUPMessageClientNoSettings) [noTransportAlert setTag:8];
+	
+    [noTransportAlert performSelectorOnMainThread:@selector(show) withObject:self waitUntilDone:YES];
+    [noTransportAlert release];
+}
+
+- (void)willPresentAlertView:(UIAlertView *)alertView
+{
+    if ([[alertView message] isEqualToString:@"\n\n\n\n\n\n\nLa configuración de la aplicación está incompleta."]) {
+        UIImageView *ivLogo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"Categories-preferences-system-icon.png"]];
+        [[ivLogo layer] setOpacity:0.85];
+        [[ivLogo layer] setFrame:CGRectMake((alertView.frame.size.width/2) - (ivLogo.frame.size.width/2), (alertView.frame.size.height/1.70) - (ivLogo.frame.size.height), ivLogo.frame.size.width, ivLogo.frame.size.height)];
+        [alertView addSubview:ivLogo];
+    }
+    if ([[alertView message] isEqualToString:@"\n\n\n\n\n\nLa aplicación continuará ejecutándose pero puede ser inestable."]) {
+        UIImageView *ivLogo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"Status-dialog-warning-icon.png"]];
+        [[ivLogo layer] setOpacity:0.85];
+        [[ivLogo layer] setFrame:CGRectMake((alertView.frame.size.width/2) - (ivLogo.frame.size.width/2), (alertView.frame.size.height/1.80) - (ivLogo.frame.size.height), ivLogo.frame.size.width, ivLogo.frame.size.height)];
+        [alertView addSubview:ivLogo];
+    }
+}
+
+#pragma mark - Dealloc
+
+- (void)dealloc
+{	
+    [_window release];
+    [_dataService release];
+	[_syncService release];
+    
+    [super dealloc];
 }
 
 @end

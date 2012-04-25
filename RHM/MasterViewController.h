@@ -8,10 +8,17 @@
 
 #import <UIKit/UIKit.h>
 
-@class DetailViewController;
+@class Reachability;
 
-@interface MasterViewController : UITableViewController
+@interface MasterViewController : UITableViewController <UIAlertViewDelegate>
 
-@property (strong, nonatomic) DetailViewController *detailViewController;
+@property (strong, nonatomic) Reachability *rInternet;
+@property (strong, nonatomic) Reachability *rHost;
+@property (strong, nonatomic) IBOutlet UIBarButtonItem *bbiSincronizacion;
+@property (strong, nonatomic) IBOutlet NSIndexPath *ipSeleccionado;
+@property (nonatomic) BOOL bAnimacionTerminada;
+
+- (IBAction)doAcercaDe:(id)sender;
+- (IBAction)doSincronizacion:(id)sender;
 
 @end
